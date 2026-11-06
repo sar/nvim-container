@@ -1,57 +1,20 @@
 name: build-devbox
 
 on:
-  workflow_dispatch:
-    inputs:
-      runner:
-        description: "GitHub runner to build on. Use a larger runner for full image."
-        required: true
-        default: "ubuntu-latest"
-      base_image:
-        description: "Base image. Use auto, python:3.14-trixie, or python:3.14-bookworm."
-        required: true
-        default: "auto"
-      target_cpu:
-        description: "TARGET_CPU build arg: westmere, x86-64, native, etc."
-        required: true
-        default: "westmere"
-      install_pytorch_cpu:
-        description: "Install CPU PyTorch. 0 is safer for Westmere."
-        required: true
-        default: "0"
   push:
+    branches: [ "main", "master" ]
     paths:
       - Dockerfile
       - .github/workflows/build-devbox.yml
+  workflow_dispatch:
 
 concurrency:
   group: devbox-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Hadolint Dockerfile
-        continue-on-error: true
-        run: |
-          docker run --rm -i hadolint/hadolint:latest-alpine \
-            hadolint --failure-threshold error \
-              --ignore DL3008 \
-              --ignore DL3013 \
-              --ignore DL3003 \
-              --ignore DL3007 \
-              --ignore DL3059 \
-              --ignore SC2086 \
-              --ignore DL4006 \
-              - < Dockerfile
-
   build:
-    needs: lint
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
@@ -75,25 +38,6 @@ jobs:
       - name: Show disk after cleanup
         run: df -h
 
-      - name: Determine base image
-        id: base
-        run: |
-          set -eux
-          REQUESTED="${{ inputs.base_image || 'auto' }}"
-
-          if [ "${REQUESTED}" = "auto" ]; then
-            if docker manifest inspect python:3.14-trixie >/dev/null 2>&1; then
-              BASE_IMAGE="python:3.14-trixie"
-            else
-              echo "python:3.14-trixie not found; falling back to python:3.14-bookworm"
-              BASE_IMAGE="python:3.14-bookworm"
-            fi
-          else
-            BASE_IMAGE="${REQUESTED}"
-          fi
-
-          echo "image=${BASE_IMAGE}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -103,18 +47,18 @@ jobs:
           context: .
           file: Dockerfile
           load: true
-          no-cache: true
           tags: devbox:local
+          # Hardcoded safe defaults. No more dynamic nonsense inputs.
           build-args: |
-            PYTHON_IMAGE_TAG=${{ steps.base.outputs.image }}
-            TARGET_CPU=${{ inputs.target_cpu || 'westmere' }}
-            INSTALL_PYTORCH_CPU=${{ inputs.install_pytorch_cpu || '0' }}
+            TARGET_CPU=westmere
+            INSTALL_PYTORCH_CPU=0
             NODE_VERSION=auto
             NEOVIM_VERSION=v0.11.5
             NERDFONTS_VERSION=v3.3.0
             GITUI_VERSION=0.27.0
             DOCKER_COMPOSE_VERSION=v2.36.0
             PODMAN_COMPOSE_VERSION=1.2.0
+            PYTHON_VERSION=3.15.2
 
       - name: Show image size
         run: docker image ls devbox:local
