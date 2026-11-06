@@ -1,0 +1,177 @@
+name: build-devbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "GitHub runner to build on. Use a larger runner for full image."
+        required: true
+        default: "ubuntu-latest"
+      base_image:
+        description: "Base image. Use auto, python:3.14-trixie, or python:3.14-bookworm."
+        required: true
+        default: "auto"
+      target_cpu:
+        description: "TARGET_CPU build arg: westmere, x86-64, native, etc."
+        required: true
+        default: "westmere"
+      install_pytorch_cpu:
+        description: "Install CPU PyTorch. 0 is safer for Westmere."
+        required: true
+        default: "0"
+  push:
+    paths:
+      - Dockerfile
+      - .github/workflows/build-devbox.yml
+
+concurrency:
+  group: devbox-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Hadolint Dockerfile
+        continue-on-error: true
+        run: |
+          docker run --rm -i hadolint/hadolint:latest-alpine \
+            hadolint --failure-threshold error \
+              --ignore DL3008 \
+              --ignore DL3013 \
+              --ignore DL3003 \
+              --ignore DL3007 \
+              --ignore DL3059 \
+              --ignore SC2086 \
+              --ignore DL4006 \
+              - < Dockerfile
+
+  build:
+    needs: lint
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show disk before cleanup
+        run: df -h
+
+      - name: Free disk space on GitHub runner
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Show disk after cleanup
+        run: df -h
+
+      - name: Determine base image
+        id: base
+        run: |
+          set -eux
+          REQUESTED="${{ inputs.base_image || 'auto' }}"
+
+          if [ "${REQUESTED}" = "auto" ]; then
+            if docker manifest inspect python:3.14-trixie >/dev/null 2>&1; then
+              BASE_IMAGE="python:3.14-trixie"
+            else
+              echo "python:3.14-trixie not found; falling back to python:3.14-bookworm"
+              BASE_IMAGE="python:3.14-bookworm"
+            fi
+          else
+            BASE_IMAGE="${REQUESTED}"
+          fi
+
+          echo "image=${BASE_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          no-cache: true
+          tags: devbox:local
+          build-args: |
+            PYTHON_IMAGE_TAG=${{ steps.base.outputs.image }}
+            TARGET_CPU=${{ inputs.target_cpu || 'westmere' }}
+            INSTALL_PYTORCH_CPU=${{ inputs.install_pytorch_cpu || '0' }}
+            NODE_VERSION=auto
+            NEOVIM_VERSION=v0.11.5
+            NERDFONTS_VERSION=v3.3.0
+            GITUI_VERSION=0.27.0
+            DOCKER_COMPOSE_VERSION=v2.36.0
+            PODMAN_COMPOSE_VERSION=1.2.0
+
+      - name: Show image size
+        run: docker image ls devbox:local
+
+      - name: Smoke test basic binaries
+        run: |
+          docker run --rm \
+            -e START_CONTAINERD=0 \
+            -e START_DOCKER=0 \
+            -e START_PODMAN_SERVICE=0 \
+            -e START_CLAMAV=0 \
+            -e DROP_TO_USER=0 \
+            devbox:local \
+            bash -lc '
+              set -eux
+              nvim --version
+              node --version
+              npm --version
+              python -V
+              pip --version
+              docker --version
+              docker-compose --version
+              podman --version
+              podman-compose --version
+              gitui --version
+              gh --version
+              ansible --version
+              w3m -version || true
+              lynx --version || true
+              zsh -ic "echo zsh ok"
+              /workspace/bin/westmere-check || true
+            '
+
+      - name: Smoke test Python imports
+        run: |
+          docker run --rm \
+            -e START_CONTAINERD=0 \
+            -e START_DOCKER=0 \
+            -e START_PODMAN_SERVICE=0 \
+            -e START_CLAMAV=0 \
+            -e DROP_TO_USER=0 \
+            devbox:local \
+            python -c 'import requests, bs4, lxml, scrapy, numpy, pandas; print("python imports ok")'
+
+      - name: Smoke test Node globals
+        run: |
+          docker run --rm \
+            -e START_CONTAINERD=0 \
+            -e START_DOCKER=0 \
+            -e START_PODMAN_SERVICE=0 \
+            -e START_CLAMAV=0 \
+            -e DROP_TO_USER=0 \
+            devbox:local \
+            bash -lc '
+              set -eux
+              tsc --version
+              eslint --version
+              prettier --version
+              webpack --version || true
+            '
