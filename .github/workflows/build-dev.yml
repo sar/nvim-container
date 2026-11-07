@@ -1,15 +1,22 @@
-name: build-devbox
+name: build-nvim-env
 
 on:
   push:
     branches: [ "main", "master" ]
     paths:
       - Dockerfile
-      - .github/workflows/build-devbox.yml
+      - .github/workflows/build-dev.yml
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
+# Required permissions to push to GHCR
+permissions:
+  contents: read
+  packages: write
+
 concurrency:
-  group: devbox-${{ github.ref }}
+  group: nvim-env-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -41,27 +48,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image
+      # Step 1: Build and load locally for smoke testing
+      - name: Build image for testing
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           load: true
-          tags: devbox:local
-          # Hardcoded safe defaults. No more dynamic nonsense inputs.
+          tags: nvim-env:test
           build-args: |
             TARGET_CPU=westmere
             INSTALL_PYTORCH_CPU=0
             NODE_VERSION=auto
             NEOVIM_VERSION=v0.11.5
             NERDFONTS_VERSION=v3.3.0
-            GITUI_VERSION=0.27.0
+            GITUI_VERSION=0.28.1
             DOCKER_COMPOSE_VERSION=v2.36.0
             PODMAN_COMPOSE_VERSION=1.2.0
             PYTHON_VERSION=3.15.2
-
-      - name: Show image size
-        run: docker image ls devbox:local
 
       - name: Smoke test basic binaries
         run: |
@@ -71,7 +75,7 @@ jobs:
             -e START_PODMAN_SERVICE=0 \
             -e START_CLAMAV=0 \
             -e DROP_TO_USER=0 \
-            devbox:local \
+            nvim-env:test \
             bash -lc '
               set -eux
               nvim --version
@@ -100,7 +104,7 @@ jobs:
             -e START_PODMAN_SERVICE=0 \
             -e START_CLAMAV=0 \
             -e DROP_TO_USER=0 \
-            devbox:local \
+            nvim-env:test \
             python -c 'import requests, bs4, lxml, scrapy, numpy, pandas; print("python imports ok")'
 
       - name: Smoke test Node globals
@@ -111,7 +115,7 @@ jobs:
             -e START_PODMAN_SERVICE=0 \
             -e START_CLAMAV=0 \
             -e DROP_TO_USER=0 \
-            devbox:local \
+            nvim-env:test \
             bash -lc '
               set -eux
               tsc --version
@@ -119,3 +123,44 @@ jobs:
               prettier --version
               webpack --version || true
             '
+
+      # Step 2: If tests pass, prepare for GHCR push
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        if: github.event_name != 'pull_request'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # Step 3: Build and push to GHCR
+      - name: Build and push Docker image to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            TARGET_CPU=westmere
+            INSTALL_PYTORCH_CPU=0
+            NODE_VERSION=auto
+            NEOVIM_VERSION=v0.11.5
+            NERDFONTS_VERSION=v3.3.0
+            GITUI_VERSION=0.28.1
+            DOCKER_COMPOSE_VERSION=v2.36.0
+            PODMAN_COMPOSE_VERSION=1.2.0
+            PYTHON_VERSION=3.15.2
