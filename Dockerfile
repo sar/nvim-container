@@ -11,7 +11,7 @@ FROM debian:trixie
 
 LABEL org.opencontainers.image.title="debian-trixie-westmere-web-cpp-python-nvim-devbox" \
       org.opencontainers.image.description="Trixie kitchen-sink dev image: Neovim, Node, Python 3.15 from source, C/C++, Docker, Podman, Zsh, scraping tools, ClamAV, StevenBlack hosts. Sources/caches stored under /workspace." \
-      org.opencontainers.image.version="4.2.0"
+      org.opencontainers.image.version="4.3.0"
 
 ################################################################################
 # Build args
@@ -357,13 +357,15 @@ RUN set -eux; \
 
 ################################################################################
 # Python venv -> /workspace/venv
+# Note: ansible is intentionally excluded here because it does not support
+# Python 3.15 yet. The system ansible installed via APT will be used instead.
 ################################################################################
 
 RUN set -eux; \
     python -m venv --upgrade-deps /workspace/venv; \
     /workspace/venv/bin/python -m pip install --upgrade pip setuptools wheel; \
     /workspace/venv/bin/python -m pip install \
-        aiohttp ansible ansible-core ansible-lint awscli bandit beautifulsoup4 black boto3 botocore click cookiecutter csvkit debugpy docker fastapi fake-useragent flake8 flask gunicorn html2text html5lib httpie httpx ipykernel ipython jupyterlab lxml markdownify matplotlib mechanicalsoup mypy numpy opencv-python-headless pandas pdfminer.six pip-tools playwright plotly podman pre-commit psycopg2-binary pydantic pylint pymongo pyquery pyright pytest pytest-cov pytest-xdist python-docx python-lsp-black python-lsp-server readability-lxml redis requests rich ruff ruff-lsp scrapy scikit-learn scipy seaborn selenium setuptools sphinx statsmodels sympy tqdm trafilatura typer uvicorn virtualenv webdriver-manager wheel openpyxl; \
+        aiohttp awscli bandit beautifulsoup4 black boto3 botocore click cookiecutter csvkit debugpy docker fastapi fake-useragent flake8 flask gunicorn html2text html5lib httpie httpx ipykernel ipython jupyterlab lxml markdownify matplotlib mechanicalsoup mypy numpy opencv-python-headless pandas pdfminer.six pip-tools playwright plotly podman pre-commit psycopg2-binary pydantic pylint pymongo pyquery pyright pytest pytest-cov pytest-xdist python-docx python-lsp-black python-lsp-server readability-lxml redis requests rich ruff ruff-lsp scrapy scikit-learn scipy seaborn selenium setuptools sphinx statsmodels sympy tqdm trafilatura typer uvicorn virtualenv webdriver-manager wheel openpyxl; \
     if [ "${PODMAN_COMPOSE_VERSION}" = "latest" ] || [ -z "${PODMAN_COMPOSE_VERSION}" ]; then /workspace/venv/bin/python -m pip install podman-compose; \
     else /workspace/venv/bin/python -m pip install "podman-compose==${PODMAN_COMPOSE_VERSION}"; fi
 
