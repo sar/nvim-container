@@ -11,7 +11,7 @@ FROM debian:trixie
 
 LABEL org.opencontainers.image.title="debian-trixie-westmere-web-cpp-python-nvim-devbox" \
       org.opencontainers.image.description="Trixie kitchen-sink dev image: Neovim, Node, Python 3.15 from source, C/C++, Docker, Podman, Zsh, scraping tools, ClamAV, StevenBlack hosts. Sources/caches stored under /workspace." \
-      org.opencontainers.image.version="4.1.0"
+      org.opencontainers.image.version="4.2.0"
 
 ################################################################################
 # Build args
@@ -32,7 +32,7 @@ ARG NODE_MAJOR=24
 ARG NODE_VERSION=auto
 ARG NEOVIM_VERSION=v0.11.5
 ARG NERDFONTS_VERSION=v3.3.0
-ARG GITUI_VERSION=0.27.0
+ARG GITUI_VERSION=0.28.1
 ARG DOCKER_COMPOSE_VERSION=v2.36.0
 ARG PODMAN_COMPOSE_VERSION=1.2.0
 ARG INSTALL_PYTORCH_CPU=0
@@ -341,7 +341,10 @@ RUN set -eux; \
     done; fc-cache -f || true; \
     GITUI_TAG="${GITUI_VERSION}"; if [ "${GITUI_TAG}" = "latest" ]; then GITUI_TAG="$(curl -fsSL https://api.github.com/repos/extrawurst/gitui/releases/latest | jq -r .tag_name)"; fi; \
     GITUI_TAG="${GITUI_TAG#v}"; \
-    curl -fsSL "https://github.com/extrawurst/gitui/releases/download/v${GITUI_TAG}/gitui-linux-musl.tar.gz" -o /workspace/downloads/gitui.tar.gz || curl -fsSL "https://github.com/extrawurst/gitui/releases/download/v${GITUI_TAG}/gitui-linux.tar.gz" -o /workspace/downloads/gitui.tar.gz; \
+    curl -fsSL "https://github.com/extrawurst/gitui/releases/download/v${GITUI_TAG}/gitui-linux-x86_64.tar.gz" \
+        -o /workspace/downloads/gitui.tar.gz \
+      || curl -fsSL "https://github.com/extrawurst/gitui/releases/download/v${GITUI_TAG}/gitui-linux-musl.tar.gz" \
+        -o /workspace/downloads/gitui.tar.gz; \
     tar -xzf /workspace/downloads/gitui.tar.gz -C /workspace/bin; chmod 0755 /workspace/bin/gitui; ln -sf /workspace/bin/gitui /usr/local/bin/gitui; gitui --version; \
     mkdir -p /workspace/zsh/plugins; \
     git clone --depth=1 --branch "${ZSH_SYNTAX_HIGHLIGHTING_VERSION}" https://github.com/zsh-users/zsh-syntax-highlighting.git /workspace/zsh/plugins/zsh-syntax-highlighting; \
