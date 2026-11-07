@@ -11,7 +11,7 @@ FROM debian:trixie
 
 LABEL org.opencontainers.image.title="debian-trixie-westmere-web-cpp-python-nvim-devbox" \
       org.opencontainers.image.description="Trixie kitchen-sink dev image: Neovim, Node, Python 3.15 from source, C/C++, Docker, Podman, Zsh, scraping tools, ClamAV, StevenBlack hosts. Sources/caches stored under /workspace." \
-      org.opencontainers.image.version="4.0.0"
+      org.opencontainers.image.version="4.1.0"
 
 ################################################################################
 # Build args
@@ -84,6 +84,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ################################################################################
 # Override APT sources (HTTPS only, main + contrib only, no non-free)
+#
+# Bootstrap ca-certificates over HTTP first, because the base image lacks the
+# root CAs required to verify deb.debian.org's HTTPS certificates.
 ################################################################################
 
 RUN set -eux; \
@@ -91,6 +94,14 @@ RUN set -eux; \
     rm -f /etc/apt/sources.list.d/* || true; \
     . /etc/os-release; \
     CODENAME="${VERSION_CODENAME:-trixie}"; \
+    { \
+        echo "deb http://deb.debian.org/debian ${CODENAME} main contrib"; \
+        echo "deb http://deb.debian.org/debian ${CODENAME}-updates main contrib"; \
+        echo "deb http://security.debian.org/debian-security ${CODENAME}-security main contrib"; \
+    } > /etc/apt/sources.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates; \
+    update-ca-certificates; \
     { \
         echo "deb https://deb.debian.org/debian ${CODENAME} main contrib"; \
         echo "deb https://deb.debian.org/debian ${CODENAME}-updates main contrib"; \
@@ -120,7 +131,7 @@ RUN set -eux; \
 
 RUN set -eux; \
     apt-get install -y --no-install-recommends \
-        ca-certificates curl gnupg jq unzip xz-utils wget
+        curl gnupg jq unzip xz-utils wget
 
 ################################################################################
 # Large APT package set with dynamic availability checks.
