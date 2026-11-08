@@ -2,6 +2,11 @@
 
 A comprehensive, single-image development environment built on Debian Trixie. Designed for web, C/C++, and Python development with strict architecture constraints (Westmere-safe, no AVX-512) and fully self-contained offline caching capabilities.
 
+## Pre-built Image
+
+- **nvim-container**: Main container image baking Dockerfile onto github container registry. [![build-nvim-env](https://github.com/sar/nvim-container/actions/workflows/build-dev.yml/badge.svg)](https://github.com/sar/nvim-container/actions/workflows/build-dev.yml)
+
+
 ## Stack Details
 
 | Component | Specification |
